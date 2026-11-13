@@ -1,0 +1,44 @@
+# Kreislauf-Station: runs the three images published by kontor2026/web-app.
+#   frontend  web app (nginx), port 8080
+#   backend   pipeline (FastAPI), internal only, data in the station-daten volume
+#   inferenz  local vision model (Ollama + Qwen3-VL)
+#
+# Start:  cp .env.example .env && docker compose pull && docker compose up -d
+# Pin a build:  TAG=<commit sha> docker compose up -d
+
+services:
+  frontend:
+    image: ghcr.io/kontor2026/web-app-frontend:${TAG:-latest}
+    ports: ["${FRONTEND_PORT:-8080}:80"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/kontor2026/web-app-backend:${TAG:-latest}
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-lokal}          # lokal | claude | claude-abo
+      LLM_BASE_URL: http://inferenz:11434/v1
+      VISION_MODEL: ${STATION_MODEL:-station-vl}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}
+    volumes: [station-daten:/data]
+    depends_on: [inferenz]
+    restart: unless-stopped
+
+  inferenz:
+    image: ghcr.io/kontor2026/web-app-inferenz:${TAG:-latest}
+    environment:
+      BASE_MODEL: ${BASE_MODEL:-qwen3-vl:4b}
+      STATION_MODEL: ${STATION_MODEL:-station-vl}
+    volumes: [ollama-modelle:/root/.ollama]
+    restart: unless-stopped
+    # NVIDIA GPU (Linux with nvidia-container-toolkit): uncomment
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+volumes:
+  station-daten:
+  ollama-modelle:
